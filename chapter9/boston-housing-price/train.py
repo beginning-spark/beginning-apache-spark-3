@@ -50,15 +50,7 @@ def train_model():
     # parsing command line arguments
 	args = parse_args()
 
-    # setting up MLflow related information
-	experiment_name = "boston-housing-price"
-	mlflow.set_tracking_uri("http://localhost:5000")
-	mlflow.set_experiment(experiment_name)
-
-	experiment = mlflow.get_experiment_by_name(experiment_name)
-	print("Experiment_id: {}".format(experiment.experiment_id))
-	print("Lifecycle_stage: {}".format(experiment.lifecycle_stage))
-	
+	mlflow.set_tracking_uri("http://localhost:5000")	
 
 	# ===============================
 	# Load data
@@ -70,7 +62,7 @@ def train_model():
 	X_train, y_train = X[:offset], y[:offset]
 	X_test, y_test = X[offset:], y[offset:]
 
-	with mlflow.start_run(experiment_id=experiment.experiment_id) as run:
+	with mlflow.start_run() as run:
 		mlflow.log_param("MLflow version", mlflow.version.VERSION)
 
 		params = {
@@ -103,8 +95,11 @@ def train_model():
 		mlflow.log_metric("r2", r2)
 
 		print("Done training model")
-		print("run_id: {}".format(run.info.run_id))
-		print("experiment id: {}".format(run.info.experiment_id))
+		print("Run_id: {}".format(run.info.run_id))
+
+		experiment = mlflow.get_experiment(run.info.experiment_id)
+		print("Experiment name: {}".format(experiment.name))
+		print("Experiment id: {}".format(run.info.experiment_id))
 
 		return (run.info.experiment_id, run.info.run_id)
 
