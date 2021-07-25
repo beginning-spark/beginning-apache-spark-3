@@ -1,9 +1,8 @@
 # Apress Source Code
 
-This repository accompanies [*Beginning Apache Spark 2*](https://www.apress.com/9781484235782) by Hien Luu (Apress, 2018).
+This repository accompanies [*Beginning Apache Spark 3*]() by Hien Luu (Apress, 2021).
 
 [comment]: #cover
-![Cover image](9781484235782.jpg)
 
 Download the files as a zip using the green button, or clone the repository to your machine using Git.
 
