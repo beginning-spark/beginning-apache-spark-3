@@ -79,9 +79,98 @@ val item_sale_df = item_df.join(sales_df, "item_id")
 item_sale_df.show()
 
 
+/* Dynamically Coalescing Shuffle Partitions */
+import org.apache.spark.sql.functions._
+// make sure the AQE is enabled
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.get("spark.sql.adaptive.enabled")
+
+val dataDF = spark.range(100000000).toDF("pId") .withColumn("item_id", when(rand() < 0.8, 100) .otherwise(rand() * 3000000).cast("int"))
+
+dataDF.groupBy("item_id").count().count()
+
+/* Dynamically Switching Join Strategies */
+spark.conf.set("spark.sql.adaptive.enabled", true)
+
+import org.apache.spark.sql.functions._
+import scala.util.Random
+
+val popularCars = Seq[String]("FORD:F-Series",   
+         "RAM:1500/2500/3500","CHEVROLET:SILVERADO",
+         "TOYOTA:RAV4","HONDA:CRV",
+         "TOYOTA:TACOMA","HONDA:CIVIC",
+         "TOYOTA:COROLLA","GMC:SIERRA"
+)
+
+// setting up functions and UDFs
+def getCarByIdx(idx:Int) : String = {
+  val validIdx = idx % popularCars.size
+  val finalIdx  = if (validIdx == 0) 1 else validIdx
+  popularCars(finalIdx)
+}
+
+def randomCar(idx:Int): String = {
+  val randomCarIdx = if (Random.nextFloat() < 0.4) 0 else  
+                         Random.nextInt(popularCars.size)
+  popularCars(randomCarIdx)
+}
+
+val getCarByIdxUDF = udf(getCarByIdx(_:Int):String)
+val randomCarUDF = udf(randomCar(_:Int):String)
+
+val car_registration_df = spark.range(500000).toDF("id") .withColumn("registration",lit(Random.alphanumeric.take(7).mkString(""))).withColumn("make", when('id > 1, getCarByIdxUDF('id)).otherwise("FORD:F-Series")).withColumn("engine_size",(rand() * 10).cast("int"))
+
+
+val car_sales_df = spark.range(30000000).toDF("id").withColumn("make",randomCarUDF(lit(5))) .withColumn("engine_size",(rand() * 11).cast("int")).withColumn("sale_price",(rand() * 100000).cast("int")).withColumn("date", date_add(current_date, - (rand() * 360).cast("int")))
+
+car_sales_df.join(car_registration_df, "make").filter('sale_price < 300).groupBy("date").agg(sum("sale_price").as("total_sales"), count("make").as("count_make")).orderBy('total_sales.desc) .select('date, 'total_sales).show()
 
 
 
+/* Dynamically Optimizing Skew Joins */
+import org.apache.spark.sql.functions._
+import scala.util.Random
+
+// make sure to turn on AQE
+spark.conf.set("spark.sql.adaptive.enabled", true)
+
+// enable skew job
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", true)
+
+// since the data size is small, avoid broadcast hash join,
+// reduce the skew partition factor and threshold
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)
+
+spark.conf.set("spark.sql.adaptive.skewJoin. skewedPartitionFactor", "1") 
+
+spark.conf.set("spark.sql.adaptive.skewJoin. skewedPartitionThresholdInBytes", "2mb")
+
+val popularCars = Seq[String]("FORD:F-Series",   
+         "RAM:1500/2500/3500","CHEVROLET:SILVERADO",
+         "TOYOTA:RAV4","HONDA:CRV",
+         "TOYOTA:TACOMA","HONDA:CIVIC",
+         "TOYOTA:COROLLA","GMC:SIERRA"
+)
+
+// setting up functions and UDFs
+def getCarByIdx(idx:Int) : String = {
+  val validIdx = idx % popularCars.size
+  val finalIdx  = if (validIdx == 0) 1 else validIdx
+  popularCars(finalIdx)
+}
+
+def randomCar(idx:Int): String = {
+  val randomCarIdx = if (Random.nextFloat() < 0.4) 0 else    
+  Random.nextInt(popularCars.size)
+  popularCars(randomCarIdx)
+}
+val getCarByIdxUDF = udf(getCarByIdx(_:Int):String)
+val randomCarUDF = udf(randomCar(_:Int):String)
 
 
-	
+// create the two data frames to join
+val car_registration_df = spark.range(500000).toDF("id").withColumn("registration", lit(Random.alphanumeric.take(7).mkString(""))) .withColumn("make", when('id > 1, getCarByIdxUDF('id)) .otherwise("FORD:F-Series")).withColumn("engine_size", (rand() * 10).cast("int"))
+
+val car_sales_df = spark.range(30000000).toDF("id").withColumn("make",randomCarUDF(lit(5))).withColumn("engine_size", (rand() * 11).cast("int")).withColumn("sale_price",(rand() * 100000).cast("int")).withColumn("date", date_add(current_date, - (rand() * 360).cast("int")))
+
+car_registration_df.join(car_sales_df, "make").groupBy("date").agg(sum("sale_price").as("total_sales"), count("make").as("count_make")).orderBy('total_sales.desc) .select('date, 'total_sales).show()
